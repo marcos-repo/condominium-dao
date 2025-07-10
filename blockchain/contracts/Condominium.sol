@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "./interface/ICondominium.sol";
+
+contract Condominium is ICondominium {
+    
+    address public manager;
+    mapping(uint16 => bool) public residences; //(unidade => true)
+    mapping(address => uint16) public residents; // wallet => unidade(1101, 2101)
+    mapping(address => bool) public counselors; //conselheiro => true
+    mapping(bytes32 => lib.Topic) public topics;
+    mapping(bytes32 => lib.Vote[]) public votings;
+
+    constructor() {
+        manager = msg.sender;
+
+        for (uint16 i = 1; i <= 2; i++) {
+            for (uint16 j = 1; j < 5; j++) {
+                for (uint16 k = 0; k <= 5; k++) {
+                    residences[(i * 1000) + (j * 100) + k] = true;
+                }
+            }
+        }
+    }
+
+    function addResident(address resident, uint16 residenceId ) external onlyCouncil {
+        require(residenceExists(residenceId), "Esta residencia nao existe");
+        residents[resident] = residenceId;
+    }
+
+    function removeResident(address resident) external onlyManager {
+        require(!counselors[resident], "Um conselheiro nao pode ser removido");
+        delete residents[resident];
+
+        if (counselors[resident]) delete counselors[resident];
+    }
+
+    function setCounselor(address resident, bool isEntering) external onlyManager {
+        if (isEntering) {
+            require(isResident(resident), "O conselheiro precisa ser um morador");
+            counselors[resident] = true;
+        } else delete counselors[resident];
+    }
+
+    function getTopic(string memory title) public view returns(lib.Topic memory) {
+        return topics[getTopicId(title)];
+    }
+
+    function topicExists(string memory title) public view returns(bool) {
+        return getTopic(title).createDate > 0;
+    }
+
+    function addTopic(string memory title, string memory description) external onlyResident {
+        require(!topicExists(title), "Topico ja existente");
+
+        lib.Topic memory newTopic = lib.Topic({
+            title: title,
+            description: description,
+            createDate: block.timestamp,
+            startDate: 0,
+            endDate: 0,
+            status: lib.Status.IDLE
+        });
+
+        topics[getTopicId(title)] = newTopic;
+    }
+
+    function removeTopic(string memory title) external onlyManager {
+        lib.Topic memory topic = getTopic(title);
+
+        require(topic.createDate > 0, "Topico inexistente");
+        require(topic.status == lib.Status.IDLE, "Este topico nao pode ser removido");
+
+        delete topics[getTopicId(title)];
+    }
+
+    function openVoting(string memory title) external onlyManager {
+        lib.Topic memory topic = getTopic(title);
+        require(topic.createDate > 0, "Topico inexistente");
+        require(topic.status == lib.Status.IDLE, "Somente topicos ociosos podem ter a votacao iniciada");
+
+        bytes32 topicId = getTopicId(title);
+        topics[topicId].status = lib.Status.VOTING;
+        topics[topicId].startDate = block.timestamp;
+    }
+
+    function vote(string memory title, lib.Options option) external onlyResident {
+        require(option != lib.Options.EMPTY, "O Voto nao pode ser vazio");
+
+        lib.Topic memory topic = getTopic(title);
+        require(topic.createDate > 0, "Topico inexistente");
+        require(topic.status == lib.Status.VOTING, "Somente topicos em votacao podem ser votados");
+    
+        uint16 residence = residents[tx.origin];
+        bytes32 topicId = getTopicId(title);
+
+        lib.Vote[] memory votes = votings[topicId];
+        for (uint i = 0; i < votes.length; i++) {
+            if(votes[i].residence == residence)
+            require(false, "Uma residencia so pode votar uma vez");
+        }
+
+        lib.Vote memory newVote = lib.Vote({
+            residence: residence,
+            resident: tx.origin,
+            option: option,
+            timestamp: block.timestamp
+        });
+
+        votings[topicId].push(newVote);
+    }
+
+    function closeVoting(string memory title) external onlyManager {
+        lib.Topic memory topic = getTopic(title);
+        require(topic.createDate > 0, "Topico inexistente");
+        require(topic.status == lib.Status.VOTING, "Somente topicos em votacao podem ser finalizados");
+
+        uint8 yes = 0;
+        uint8 no = 0;
+
+        bytes32 topicId = getTopicId(title);
+        lib.Vote[] memory votes = votings[topicId];
+
+        for (uint i = 0; i < votes.length; i++) {
+            if(votes[i].option == lib.Options.YES)
+                yes++;
+            else if(votes[i].option == lib.Options.NO)
+                no++;                
+        }
+
+        topics[topicId].status =  (yes > no) ? lib.Status.APPROVED : lib.Status.DENIED;
+        topics[topicId].endDate = block.timestamp;
+    }
+
+    function voteCount(string memory title) external view returns (uint) {
+        bytes32 topicId = getTopicId(title);
+        return votings[topicId].length;
+    }
+
+
+    function getTopicId(string memory title) private  pure returns (bytes32 topicId) {
+        topicId = keccak256(bytes(title));
+    }
+
+    modifier onlyManager() {
+        require(tx.origin == manager, "Somente o sindico pode executar esta operacao");
+        _;
+    }
+
+    modifier onlyCouncil() {
+        require(tx.origin == manager || counselors[tx.origin], "Somente o sindico ou conselheiros podem executar esta operacao");
+        _;
+    }
+
+    modifier onlyResident() {
+        require(tx.origin == manager || isResident(tx.origin), "Somente o sindico ou moradores podem executar esta operacao");
+        _;
+    }
+
+    function residenceExists(uint16 residenceId) public view returns (bool) {
+        return residences[residenceId];
+    }
+
+    function isResident(address resident) public view returns (bool) {
+        return residents[resident] > 0;
+    }
+}
