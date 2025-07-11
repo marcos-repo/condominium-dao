@@ -33,8 +33,6 @@ contract Condominium is ICondominium {
     function removeResident(address resident) external onlyManager {
         require(!counselors[resident], "Um conselheiro nao pode ser removido");
         delete residents[resident];
-
-        if (counselors[resident]) delete counselors[resident];
     }
 
     function setCounselor(address resident, bool isEntering) external onlyManager {
@@ -107,8 +105,7 @@ contract Condominium is ICondominium {
 
         lib.Vote[] memory votes = votings[topicId];
         for (uint i = 0; i < votes.length; i++) {
-            if(votes[i].residence == residence)
-            require(false, "Uma residencia so pode votar uma vez");
+            require(votes[i].residence != residence, "Uma residencia so pode votar uma vez");
         }
 
         lib.Vote memory newVote = lib.Vote({
@@ -140,7 +137,6 @@ contract Condominium is ICondominium {
 
         uint8 yes = 0;
         uint8 no = 0;
-        uint8 abs = 0;
 
         bytes32 topicId = getTopicId(title);
         lib.Vote[] memory votes = votings[topicId];
@@ -150,8 +146,6 @@ contract Condominium is ICondominium {
                 yes++;
             else if(votes[i].option == lib.Options.NO)
                 no++;  
-            else 
-                abs++;              
         }
 
         lib.Status newStatus = (yes > no) ? lib.Status.APPROVED : lib.Status.DENIED;
@@ -167,7 +161,6 @@ contract Condominium is ICondominium {
                 manager = topic.responsible;
             }
         }
-
     }
 
     function voteCount(string memory title) public view returns (uint) {
