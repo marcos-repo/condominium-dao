@@ -11,6 +11,7 @@ contract Condominium is ICondominium {
     mapping(address => bool) public counselors; //conselheiro => true
     mapping(bytes32 => lib.Topic) public topics;
     mapping(bytes32 => lib.Vote[]) public votings;
+    uint public monthlyQuota = 0.01 ether;
 
     constructor() {
         manager = msg.sender;
@@ -51,8 +52,14 @@ contract Condominium is ICondominium {
         return getTopic(title).createDate > 0;
     }
 
-    function addTopic(string memory title, string memory description) external onlyResident {
+    function addTopic(string memory title, string memory description, lib.Category category, uint amount, address responsible) external onlyResident {
         require(!topicExists(title), "Topico ja existente");
+
+        if(amount > 0) {
+            require(
+                category == lib.Category.SPENT || category == lib.Category.CHANGE_QUOTA,
+                "Categoria invalida");
+        }
 
         lib.Topic memory newTopic = lib.Topic({
             title: title,
@@ -60,7 +67,10 @@ contract Condominium is ICondominium {
             createDate: block.timestamp,
             startDate: 0,
             endDate: 0,
-            status: lib.Status.IDLE
+            status: lib.Status.IDLE,
+            category: category,
+            amount: amount,
+            responsible: responsible != address(0) ? responsible : tx.origin
         });
 
         topics[getTopicId(title)] = newTopic;
@@ -116,24 +126,51 @@ contract Condominium is ICondominium {
         require(topic.createDate > 0, "Topico inexistente");
         require(topic.status == lib.Status.VOTING, "Somente topicos em votacao podem ser finalizados");
 
+        uint minimumVotes = 5;
+
+        if(topic.category == lib.Category.SPENT)
+            minimumVotes = 10;
+        else if(topic.category == lib.Category.CHANGE_MANAGER) 
+            minimumVotes = 15;
+        else if(topic.category == lib.Category.CHANGE_QUOTA)
+            minimumVotes = 20;
+
+        uint totalVotes = voteCount(title);
+        require(totalVotes >= minimumVotes, "Esta votacao ainda nao atingiu a quantidade minima de votos para ser encerrada");
+
         uint8 yes = 0;
         uint8 no = 0;
+        uint8 abs = 0;
 
         bytes32 topicId = getTopicId(title);
         lib.Vote[] memory votes = votings[topicId];
 
-        for (uint i = 0; i < votes.length; i++) {
+        for (uint8 i = 0; i < votes.length; i++) {
             if(votes[i].option == lib.Options.YES)
                 yes++;
             else if(votes[i].option == lib.Options.NO)
-                no++;                
+                no++;  
+            else 
+                abs++;              
         }
 
-        topics[topicId].status =  (yes > no) ? lib.Status.APPROVED : lib.Status.DENIED;
+        lib.Status newStatus = (yes > no) ? lib.Status.APPROVED : lib.Status.DENIED;
+
+        topics[topicId].status = newStatus;
         topics[topicId].endDate = block.timestamp;
+
+        if(newStatus == lib.Status.APPROVED) {
+            if(topic.category == lib.Category.CHANGE_QUOTA) {
+                monthlyQuota = topic.amount;
+            }
+            else if (topic.category == lib.Category.CHANGE_MANAGER) {
+                manager = topic.responsible;
+            }
+        }
+
     }
 
-    function voteCount(string memory title) external view returns (uint) {
+    function voteCount(string memory title) public view returns (uint) {
         bytes32 topicId = getTopicId(title);
         return votings[topicId].length;
     }

@@ -1,9 +1,10 @@
 import {
-  time,
   loadFixture,
 } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
+import { CondominiumAdapter } from "../typechain-types/contracts";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("Condominium Adapter", function () {
 
@@ -14,12 +15,34 @@ describe("Condominium Adapter", function () {
         DENIED = 3 
     }
     
-    enum Options {
-        EMPTY = 0,
-        YES = 1,
-        NO = 3,
-        ABSTENTION = 4
+  enum Options {
+      EMPTY = 0,
+      YES = 1,
+      NO = 3,
+      ABSTENTION = 4
+  }
+
+  enum Category {
+      DECISION = 0,
+      SPENT = 1,
+      CHANGE_QUOTA = 2,
+      CHANGE_MANAGER = 3
+  }
+
+  async function addResidents(adapter: CondominiumAdapter, count: number, accounts: SignerWithAddress[]) {
+      for (let i = 1; i <= count; i++) {
+        const residenceId = (1000 * Math.ceil(i / 25)) + (100 * Math.ceil(i / 5) + (i - (5 * Math.floor(( i - 1) / 5))));
+        await adapter.addResident(accounts[i].address, residenceId);     
+      }
+  }
+
+  async function addVotes(adapter: CondominiumAdapter, count: number, accounts: SignerWithAddress[]) {
+    for (let i = 1; i <= count; i++) {
+      const instance = adapter.connect(accounts[i]);
+
+      await instance.vote("topico 1", Options.YES);  
     }
+  }
 
   async function deployAdapterFixture() {
 
@@ -102,7 +125,7 @@ describe("Condominium Adapter", function () {
       const { implementation } = await loadFixture(deployImplementationFixture);
 
       await adapter.upgrade(implementation);
-      await adapter.addTopic("topico 1", "");
+      await adapter.addTopic("topico 1", "", Category.DECISION, 0, manager.address);
 
       expect(await implementation.topicExists("topico 1")).eq(true);
     });
@@ -112,7 +135,7 @@ describe("Condominium Adapter", function () {
       const { implementation } = await loadFixture(deployImplementationFixture);
 
       await adapter.upgrade(implementation);
-      await adapter.addTopic("topico 1", "");
+      await adapter.addTopic("topico 1", "", Category.DECISION, 0, manager.address);
 
        await adapter.removeTopic("topico 1");
 
@@ -124,7 +147,7 @@ describe("Condominium Adapter", function () {
       const { implementation } = await loadFixture(deployImplementationFixture);
 
       await adapter.upgrade(implementation);
-      await adapter.addTopic("topico 1", "");
+      await adapter.addTopic("topico 1", "", Category.DECISION, 0, manager.address);
 
       await adapter.openVoting("topico 1");
 
@@ -138,7 +161,7 @@ describe("Condominium Adapter", function () {
 
       await adapter.upgrade(implementation);
       await adapter.addResident(resident.address, 2201);
-      await adapter.addTopic("topico 1", "");
+      await adapter.addTopic("topico 1", "", Category.DECISION, 0, manager.address);
       await adapter.openVoting("topico 1");
       
       const instance = adapter.connect(resident);
@@ -152,8 +175,12 @@ describe("Condominium Adapter", function () {
       const { implementation } = await loadFixture(deployImplementationFixture);
 
       await adapter.upgrade(implementation);
-      await adapter.addTopic("topico 1", "");
+      await adapter.addTopic("topico 1", "", Category.DECISION, 0, manager.address);
       await adapter.openVoting("topico 1");
+
+      await addResidents(adapter, 5, accounts);
+      await addVotes(adapter, 5, accounts);
+     
       await adapter.closeVoting("topico 1");
 
       expect((await implementation.getTopic("topico 1")).status).not.eq(Status.IDLE);

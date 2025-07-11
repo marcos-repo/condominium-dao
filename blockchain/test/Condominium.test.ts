@@ -1,7 +1,8 @@
 import {
-  time,
   loadFixture,
 } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { Condominium } from "../typechain-types/contracts";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -9,44 +10,69 @@ import hre from "hardhat";
 describe("Condominium", function () {
 
   enum Status {
-        IDLE = 0,
-        VOTING = 1,
-        APPROVED = 2, 
-        DENIED = 3 
-    }
+      IDLE = 0,
+      VOTING = 1,
+      APPROVED = 2, 
+      DENIED = 3 
+  }
     
-    enum Options {
+  enum Options {
         EMPTY = 0,
         YES = 1,
         NO = 3,
         ABSTENTION = 4
+  }
+
+  enum Category {
+      DECISION = 0,
+      SPENT = 1,
+      CHANGE_QUOTA = 2,
+      CHANGE_MANAGER = 3
+  }
+
+  async function addResidents(contract: Condominium, count: number, accounts: SignerWithAddress[]) {
+        for (let i = 1; i <= count; i++) {
+          const residenceId = (1000 * Math.ceil(i / 25)) + (100 * Math.ceil(i / 5) + (i - (5 * Math.floor(( i - 1) / 5))));
+          await contract.addResident(accounts[i].address, residenceId);     
+        }
     }
+  
+  async function addVotes(contract: Condominium, count: number, accounts: SignerWithAddress[], option: Options | undefined) {
+    for (let i = 1; i <= count; i++) {
+      const instance = contract.connect(accounts[i]);
+
+      await instance.vote("topico 1", option == undefined ? Options.YES : option);  
+    }
+  }
 
   async function deployFixture() {
-
-    const [manager, resident, council] = await hre.ethers.getSigners();
+    const accounts = await hre.ethers.getSigners();
+    const manager = accounts[0];
 
     const Condominium = await hre.ethers.getContractFactory("Condominium");
     const contract = await Condominium.deploy();
 
-    return { contract, manager, resident, council };
+    return { contract, manager, accounts };
   }
 
     it("Should be residence", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
 
       expect(await contract.residenceExists(2102)).eq(true);
     });
 
     it("Should add resident", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2102);
       expect(await contract.isResident(resident.address)).eq(true);
     });
 
     it("Should NOT add resident(permission)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      const resident = accounts[1];
 
       const instance = contract.connect(resident);
 
@@ -57,7 +83,8 @@ describe("Condominium", function () {
     });
 
     it("Should NOT add resident(residence does not exists)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await expect(contract.addResident(resident.address, 9999))
       .to
@@ -66,7 +93,8 @@ describe("Condominium", function () {
     });
 
     it("Should remove resident", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2102);
 
@@ -75,7 +103,8 @@ describe("Condominium", function () {
     });
 
     it("Should NOT remove resident(permission)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2102);
 
@@ -87,7 +116,8 @@ describe("Condominium", function () {
     });
 
     it("Should NOT remove resident(counselor)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2102);
 
@@ -100,7 +130,8 @@ describe("Condominium", function () {
     });
 
     it("Should set counselor", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2102);
 
@@ -110,7 +141,9 @@ describe("Condominium", function () {
     });
 
     it("Should add resident(council)", async function () {
-      const { contract, manager, resident, council } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
+      const council = accounts[2];
 
       await contract.addResident(council.address, 2102);
       await contract.setCounselor(council.address, true);
@@ -122,7 +155,8 @@ describe("Condominium", function () {
     });
 
     it("Should NOT set counselor(permission)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2102);
 
@@ -135,7 +169,8 @@ describe("Condominium", function () {
     });
 
     it("Should NOT set counselor(resident)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await expect(contract.setCounselor(resident.address, true))
       .to
@@ -144,7 +179,8 @@ describe("Condominium", function () {
     });
 
     it("Should remove counselor", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2102);
 
@@ -184,60 +220,64 @@ describe("Condominium", function () {
     // });
 
     it("Should add topic(manager)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
       expect(await contract.topicExists("topico 1")).eq(true);
     });
 
     it("Should add topic(resident)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
       
       await contract.addResident(resident.address, 2102);
 
       const instance = contract.connect(resident);
-      await instance.addTopic("topico 1", "descricao 1");
+      await instance.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       expect(await contract.topicExists("topico 1")).eq(true);
     });
 
     it("Should NOT add topic(permission)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
       const instance = contract.connect(resident);
 
-      await expect(instance.addTopic("topico 1", "descricao 1"))
+      await expect(instance.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address))
       .to
       .be
       .revertedWith("Somente o sindico ou moradores podem executar esta operacao");
     });
 
      it("Should NOT add topic(duplicated)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
-      await expect(contract.addTopic("topico 1", "descricao 1"))
+      await expect(contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address))
       .to
       .be
       .revertedWith("Topico ja existente");
     });
 
     it("Should remove topic(manager)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.removeTopic("topico 1");
       expect(await contract.topicExists("topico 1")).eq(false);
     });
 
     it("Should NOT remove topic(permission)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
       
       await contract.addResident(resident.address, 2102);
 
       const instance = contract.connect(resident);
-      await instance.addTopic("topico 1", "descricao 1");
+      await instance.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await expect(instance.removeTopic("topico 1"))
       .to
@@ -246,7 +286,7 @@ describe("Condominium", function () {
     });
 
     it("Should NOT remove topic(not exists)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract} = await loadFixture(deployFixture);
       
       await expect(contract.removeTopic("topico 1"))
       .to
@@ -255,9 +295,10 @@ describe("Condominium", function () {
     });
 
     it("Should NOT remove topic(status)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
 
@@ -268,9 +309,10 @@ describe("Condominium", function () {
     });
 
     it("Should open topic", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
 
@@ -278,7 +320,8 @@ describe("Condominium", function () {
     });
 
     it("Should NOT open topic(does not exists)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await expect(contract.openVoting("topico 1"))
       .to
@@ -287,9 +330,9 @@ describe("Condominium", function () {
     });
 
     it("Should NOT open topic(status)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
 
@@ -300,9 +343,10 @@ describe("Condominium", function () {
     });
 
     it("Should vote", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
       
@@ -315,9 +359,10 @@ describe("Condominium", function () {
     });
 
     it("Should NOT vote(permission)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
       
@@ -330,9 +375,10 @@ describe("Condominium", function () {
     });
 
     it("Should NOT vote(empty vote)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
       
@@ -347,7 +393,8 @@ describe("Condominium", function () {
     });
 
     it("Should NOT vote(topic does not exists)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2201);
 
@@ -360,9 +407,10 @@ describe("Condominium", function () {
     });
 
     it("Should NOT vote(status)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.addResident(resident.address, 2201);
 
@@ -374,9 +422,10 @@ describe("Condominium", function () {
     });
 
     it("Should NOT vote(duplicated vote)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
       
@@ -392,11 +441,14 @@ describe("Condominium", function () {
     });
 
     it("Should close voting", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts} = await loadFixture(deployFixture);
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
+
+      await addResidents(contract, 5, accounts);
+      await addVotes(contract, 5, accounts);
 
       await contract.closeVoting("topico 1");
 
@@ -405,17 +457,15 @@ describe("Condominium", function () {
     });
 
     it("Should close voting(result APPROVED)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
 
-      await contract.vote("topico 1", Options.YES);
-
-      await contract.addResident(resident.address, 2201);
-      const instance = contract.connect(resident);      
-      await instance.vote("topico 1", Options.YES);
+      await addResidents(contract, 5, accounts);
+      await addVotes(contract, 5, accounts);
 
       await contract.closeVoting("topico 1");
       const topic = await contract.getTopic("topico 1");
@@ -424,16 +474,16 @@ describe("Condominium", function () {
     });
 
     it("Should close voting(result DENIED)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
       await contract.addResident(resident.address, 2201);
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
       await contract.openVoting("topico 1");
-      await contract.vote("topico 1", Options.NO);
-
-      const instance = contract.connect(resident);      
-      await instance.vote("topico 1", Options.NO);
+      
+      await addResidents(contract, 5, accounts);
+      await addVotes(contract, 5, accounts, Options.NO);
 
       await contract.closeVoting("topico 1");
 
@@ -442,9 +492,10 @@ describe("Condominium", function () {
     });
 
     it("Should NOT close voting(permission)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
 
       await contract.openVoting("topico 1");
 
@@ -459,7 +510,7 @@ describe("Condominium", function () {
     });
 
      it("Should NOT close voting(does not exists)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract } = await loadFixture(deployFixture);
 
       await expect(contract.closeVoting("topico 1"))
       .to
@@ -468,9 +519,9 @@ describe("Condominium", function () {
     });
 
     it("Should NOT close voting(status)", async function () {
-      const { contract, manager, resident } = await loadFixture(deployFixture);
+      const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic("topico 1", "descricao 1");
+      await contract.addTopic("topico 1", "descricao 1", Category.DECISION, 0, manager.address);
       expect(await contract.topicExists("topico 1")).eq(true);
 
       await expect(contract.closeVoting("topico 1"))
