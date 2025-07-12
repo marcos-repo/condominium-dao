@@ -25,7 +25,7 @@ contract Condominium is ICondominium {
         }
     }
 
-    function addResident(address resident, uint16 residenceId ) external onlyCouncil {
+    function addResident(address resident, uint16 residenceId ) external onlyCouncil validAddress(resident) {
         require(residenceExists(residenceId), "Esta residencia nao existe");
         residents[resident] = residenceId;
     }
@@ -35,7 +35,7 @@ contract Condominium is ICondominium {
         delete residents[resident];
     }
 
-    function setCounselor(address resident, bool isEntering) external onlyManager {
+    function setCounselor(address resident, bool isEntering) external onlyManager validAddress(resident) {
         if (isEntering) {
             require(isResident(resident), "O conselheiro precisa ser um morador");
             counselors[resident] = true;
@@ -72,6 +72,27 @@ contract Condominium is ICondominium {
         });
 
         topics[getTopicId(title)] = newTopic;
+    }
+
+    function editTopic(string memory topicToEdit, string memory description, uint amount, address responsible) external onlyManager {
+        lib.Topic memory topic = getTopic(topicToEdit);
+
+        require(topic.createDate > 0, "Topico inexistente");
+        require(topic.status == lib.Status.IDLE, "Somente topicos com status IDLE podem ser editados");
+
+        bytes32 topicId = getTopicId(topic.title);
+
+        if(bytes(description).length >= 0)
+            topics[topicId].description = description;
+        
+        if(amount > 0)
+            topics[topicId].amount = amount;
+
+        if(responsible != address(0))
+            topics[topicId].responsible = responsible;
+
+        
+
     }
 
     function removeTopic(string memory title) external onlyManager {
@@ -185,6 +206,11 @@ contract Condominium is ICondominium {
 
     modifier onlyResident() {
         require(tx.origin == manager || isResident(tx.origin), "Somente o sindico ou moradores podem executar esta operacao");
+        _;
+    }
+
+    modifier validAddress(address addr) {
+        require(addr != address(0), "Endereco de carteira invalido");
         _;
     }
 
