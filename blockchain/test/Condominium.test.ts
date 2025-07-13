@@ -30,8 +30,9 @@ describe("Condominium", function () {
       CHANGE_MANAGER = 3
   }
 
-  const title = "topico 1";
+  const topicTitle = "topico 1";
   const description = "descricao topico 1"
+  const zeroAddress = ethers.ZeroAddress;
 
   async function addResidents(contract: Condominium, count: number, accounts: SignerWithAddress[]) {
         for (let i = 1; i <= count; i++) {
@@ -44,7 +45,7 @@ describe("Condominium", function () {
     for (let i = 1; i <= count; i++) {
       const instance = contract.connect(accounts[i-1]);
 
-      await instance.vote(title, option == undefined ? Options.YES : option);  
+      await instance.vote(topicTitle, option == undefined ? Options.YES : option);  
     }
   }
 
@@ -95,6 +96,15 @@ describe("Condominium", function () {
       .revertedWith("Esta residencia nao existe");
     });
 
+    it("Should NOT add resident(invalid address)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      await expect(contract.addResident(zeroAddress, 1201))
+      .to
+      .be
+      .revertedWith("Endereco de carteira invalido");
+    });
+
     it("Should remove resident", async function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
@@ -141,6 +151,18 @@ describe("Condominium", function () {
       await contract.setCounselor(resident.address, true);
 
       expect(await contract.counselors(resident.address)).eq(true);
+    });
+
+    it("Should NOT set counselor(invalid address)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[1];
+
+      await contract.addResident(resident.address, 2102);
+
+      await expect(contract.setCounselor(zeroAddress, true))
+      .to
+      .be
+      .revertedWith("Endereco de carteira invalido");
     });
 
     it("Should add resident(council)", async function () {
@@ -197,8 +219,8 @@ describe("Condominium", function () {
     it("Should add topic(manager)", async function () {
       const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
-      expect(await contract.topicExists(title)).eq(true);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+      expect(await contract.topicExists(topicTitle)).eq(true);
     });
 
     it("Should add topic(resident)", async function () {
@@ -208,9 +230,9 @@ describe("Condominium", function () {
       await contract.addResident(resident.address, 2102);
 
       const instance = contract.connect(resident);
-      await instance.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await instance.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      expect(await contract.topicExists(title)).eq(true);
+      expect(await contract.topicExists(topicTitle)).eq(true);
     });
 
     it("Should NOT add topic(permission)", async function () {
@@ -218,7 +240,7 @@ describe("Condominium", function () {
       const resident = accounts[1];
       const instance = contract.connect(resident);
 
-      await expect(instance.addTopic(title, description, Category.DECISION, 0, manager.address))
+      await expect(instance.addTopic(topicTitle, description, Category.DECISION, 0, manager.address))
       .to
       .be
       .revertedWith("Somente o sindico ou moradores podem executar esta operacao");
@@ -227,7 +249,7 @@ describe("Condominium", function () {
      it("Should NOT add topic(duplicated)", async function () {
       const { contract, manager } = await loadFixture(deployFixture);
 
-      await expect(contract.addTopic(title, description, Category.DECISION, 1, manager.address))
+      await expect(contract.addTopic(topicTitle, description, Category.DECISION, 1, manager.address))
       .to
       .be
       .revertedWith("Categoria invalida");
@@ -236,22 +258,103 @@ describe("Condominium", function () {
      it("Should NOT add topic(invalid amount)", async function () {
       const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await expect(contract.addTopic(title, description, Category.DECISION, 0, manager.address))
+      await expect(contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address))
       .to
       .be
       .revertedWith("Topico ja existente");
+    });
+
+    it("Should edit topic(description)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const newDescription = "Nova descricao";
+
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+      await contract.editTopic(topicTitle, newDescription, 0, zeroAddress);
+
+      const topic = await contract.getTopic(topicTitle);
+
+      expect(topic.description).eq(newDescription);
+ 
+    });
+
+    it("Should edit topic(amount)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const quota = ethers.parseEther("0.01");
+      const newQuota = ethers.parseEther("0.02");
+
+      await contract.addTopic(topicTitle, description, Category.SPENT, quota, manager.address);
+      await contract.editTopic(topicTitle, "", newQuota, zeroAddress);
+
+      const topic = await contract.getTopic(topicTitle);
+
+      expect(topic.amount).eq(newQuota);
+  
+    });
+
+    it("Should edit topic(responsible)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[2];
+
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+      
+      await contract.editTopic(topicTitle, "", 0, resident.address);
+
+      const topic = await contract.getTopic(topicTitle);
+
+      expect(topic.responsible).eq(resident.address);      
+    });
+
+    it("Should NOT edit topic(permission)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[2];
+
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+      
+      const instance = contract.connect(resident);
+      await expect(instance.editTopic(topicTitle, "", 0, resident.address))
+      .to
+      .be
+      .revertedWith("Somente o sindico pode executar esta operacao");
+ 
+    });
+
+    it("Should NOT edit topic(not exists)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[2];
+
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+
+      await expect(contract.editTopic("topico 2", "", 0, resident.address))
+      .to
+      .be
+      .revertedWith("Topico inexistente");
+ 
+    });
+
+    it("Should NOT edit topic(status)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+      const resident = accounts[2];
+
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+      await contract.openVoting(topicTitle);
+
+      await expect(contract.editTopic(topicTitle, "", 0, resident.address))
+      .to
+      .be
+      .revertedWith("Somente topicos com status IDLE podem ser editados");
+ 
     });
 
     it("Should remove topic(manager)", async function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.removeTopic(title);
-      expect(await contract.topicExists(title)).eq(false);
+      await contract.removeTopic(topicTitle);
+      expect(await contract.topicExists(topicTitle)).eq(false);
     });
 
     it("Should NOT remove topic(permission)", async function () {
@@ -261,9 +364,9 @@ describe("Condominium", function () {
       await contract.addResident(resident.address, 2102);
 
       const instance = contract.connect(resident);
-      await instance.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await instance.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await expect(instance.removeTopic(title))
+      await expect(instance.removeTopic(topicTitle))
       .to
       .be
       .revertedWith("Somente o sindico pode executar esta operacao");
@@ -272,7 +375,7 @@ describe("Condominium", function () {
     it("Should NOT remove topic(not exists)", async function () {
       const { contract} = await loadFixture(deployFixture);
       
-      await expect(contract.removeTopic(title))
+      await expect(contract.removeTopic(topicTitle))
       .to
       .be
       .revertedWith("Topico inexistente");
@@ -282,11 +385,11 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
-      await expect(contract.removeTopic(title))
+      await expect(contract.removeTopic(topicTitle))
       .to
       .be
       .revertedWith("Este topico nao pode ser removido");
@@ -296,18 +399,18 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
-      expect((await contract.getTopic(title)).status).eq(Status.VOTING);
+      expect((await contract.getTopic(topicTitle)).status).eq(Status.VOTING);
     });
 
     it("Should NOT open topic(does not exists)", async function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await expect(contract.openVoting(title))
+      await expect(contract.openVoting(topicTitle))
       .to
       .be
       .revertedWith("Topico inexistente");
@@ -317,11 +420,11 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
       const instance = contract.connect(resident);
 
-      await expect(instance.openVoting(title))
+      await expect(instance.openVoting(topicTitle))
       .to
       .be
       .revertedWith("Somente o sindico pode executar esta operacao");
@@ -330,11 +433,11 @@ describe("Condominium", function () {
     it("Should NOT open topic(status)", async function () {
       const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
-      await expect(contract.openVoting(title))
+      await expect(contract.openVoting(topicTitle))
       .to
       .be
       .revertedWith("Somente topicos ociosos podem ter a votacao iniciada");
@@ -344,29 +447,29 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
       
       await contract.addResident(resident.address, 2201);
 
       const instance = contract.connect(resident);
-      await instance.vote(title, Options.NO);
+      await instance.vote(topicTitle, Options.NO);
 
-      expect(await contract.voteCount(title)).eq(1);
+      expect(await contract.voteCount(topicTitle)).eq(1);
     });
 
     it("Should NOT vote(permission)", async function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
       
       const instance = contract.connect(resident);
 
-      await expect(instance.vote(title, Options.EMPTY))
+      await expect(instance.vote(topicTitle, Options.EMPTY))
       .to
       .be
       .revertedWith("Somente o sindico ou moradores podem executar esta operacao");
@@ -376,15 +479,15 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
       
       await contract.addResident(resident.address, 2201);
 
       const instance = contract.connect(resident);
 
-      await expect(instance.vote(title, Options.EMPTY))
+      await expect(instance.vote(topicTitle, Options.EMPTY))
       .to
       .be
       .revertedWith("O Voto nao pode ser vazio");
@@ -398,7 +501,7 @@ describe("Condominium", function () {
 
       const instance = contract.connect(resident);
 
-      await expect(instance.vote(title, Options.NO))
+      await expect(instance.vote(topicTitle, Options.NO))
       .to
       .be
       .revertedWith("Topico inexistente");
@@ -408,12 +511,12 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
       await contract.addResident(resident.address, 2201);
 
       const instance = contract.connect(resident);
-      await expect(instance.vote(title, Options.NO))
+      await expect(instance.vote(topicTitle, Options.NO))
       .to
       .be
       .revertedWith("Somente topicos em votacao podem ser votados");
@@ -423,16 +526,16 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
       
       await contract.addResident(resident.address, 2201);
 
       const instance = contract.connect(resident);
-      await instance.vote(title, Options.YES);
+      await instance.vote(topicTitle, Options.YES);
 
-      await expect(instance.vote(title, Options.NO))
+      await expect(instance.vote(topicTitle, Options.NO))
       .to
       .be
       .revertedWith("Uma residencia so pode votar uma vez");
@@ -441,34 +544,34 @@ describe("Condominium", function () {
     it("Should close voting", async function () {
       const { contract, manager, accounts} = await loadFixture(deployFixture);
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
       await addResidents(contract, 6, accounts);
       await addVotes(contract, 5, accounts);
 
       const instance = contract.connect(accounts[5]);
-      instance.vote(title, Options.ABSTENTION);
+      instance.vote(topicTitle, Options.ABSTENTION);
 
-      await contract.closeVoting(title);
+      await contract.closeVoting(topicTitle);
 
-      expect((await contract.getTopic(title)).status).not.eq(Status.IDLE);
-      expect((await contract.getTopic(title)).status).not.eq(Status.VOTING);
+      expect((await contract.getTopic(topicTitle)).status).not.eq(Status.IDLE);
+      expect((await contract.getTopic(topicTitle)).status).not.eq(Status.VOTING);
     });
 
     it("Should close voting(result APPROVED)", async function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
       await addResidents(contract, 5, accounts);
       await addVotes(contract, 5, accounts);
 
-      await contract.closeVoting(title);
-      const topic = await contract.getTopic(title);
+      await contract.closeVoting(topicTitle);
+      const topic = await contract.getTopic(topicTitle);
 
       expect(topic.status).eq(Status.APPROVED);
     });
@@ -476,15 +579,15 @@ describe("Condominium", function () {
     it("Should close voting(result DENIED)", async function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
-      await contract.openVoting(title);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+      await contract.openVoting(topicTitle);
       
       await addResidents(contract, 5, accounts);
       await addVotes(contract, 5, accounts, Options.NO);
 
-      await contract.closeVoting(title);
+      await contract.closeVoting(topicTitle);
 
-      const topic = await contract.getTopic(title);
+      const topic = await contract.getTopic(topicTitle);
       expect(topic.status).eq(Status.DENIED);
     });
 
@@ -493,13 +596,13 @@ describe("Condominium", function () {
 
       const newQuota = ethers.parseEther("0.02");
 
-      await contract.addTopic(title, description, Category.CHANGE_QUOTA, newQuota, manager.address);
-      await contract.openVoting(title);
+      await contract.addTopic(topicTitle, description, Category.CHANGE_QUOTA, newQuota, manager.address);
+      await contract.openVoting(topicTitle);
       
       await addResidents(contract, 20, accounts);
       await addVotes(contract, 20, accounts, Options.YES);
 
-      await contract.closeVoting(title);
+      await contract.closeVoting(topicTitle);
 
       const monthlyQuota = await contract.monthlyQuota();
       expect(monthlyQuota).eq(newQuota);
@@ -509,13 +612,13 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.CHANGE_MANAGER, 0, resident.address);
-      await contract.openVoting(title);
+      await contract.addTopic(topicTitle, description, Category.CHANGE_MANAGER, 0, resident.address);
+      await contract.openVoting(topicTitle);
       
       await addResidents(contract, 15, accounts);
       await addVotes(contract, 15, accounts, Options.YES);
 
-      await contract.closeVoting(title);
+      await contract.closeVoting(topicTitle);
 
       const newManager = await contract.manager();
       expect(newManager).eq(resident.address);
@@ -525,15 +628,15 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const spent = 1n;
 
-      await contract.addTopic(title, description, Category.SPENT, spent, manager.address);
+      await contract.addTopic(topicTitle, description, Category.SPENT, spent, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
       await addResidents(contract, 10, accounts);
       await addVotes(contract, 10, accounts);
 
-      await contract.closeVoting(title);
-      const topic = await contract.getTopic(title);
+      await contract.closeVoting(topicTitle);
+      const topic = await contract.getTopic(topicTitle);
 
       expect(topic.status).eq(Status.APPROVED);
     });
@@ -542,15 +645,15 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const resident = accounts[1];
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
       await contract.addResident(resident.address, 2201);
       const instance = contract.connect(resident);      
-      await instance.vote(title, Options.YES);
+      await instance.vote(topicTitle, Options.YES);
 
-      await expect(instance.closeVoting(title))
+      await expect(instance.closeVoting(topicTitle))
       .to
       .be
       .revertedWith("Somente o sindico pode executar esta operacao");
@@ -559,7 +662,7 @@ describe("Condominium", function () {
      it("Should NOT close voting(does not exists)", async function () {
       const { contract } = await loadFixture(deployFixture);
 
-      await expect(contract.closeVoting(title))
+      await expect(contract.closeVoting(topicTitle))
       .to
       .be
       .revertedWith("Topico inexistente");
@@ -568,10 +671,10 @@ describe("Condominium", function () {
     it("Should NOT close voting(status)", async function () {
       const { contract, manager } = await loadFixture(deployFixture);
 
-      await contract.addTopic(title, description, Category.DECISION, 0, manager.address);
-      expect(await contract.topicExists(title)).eq(true);
+      await contract.addTopic(topicTitle, description, Category.DECISION, 0, manager.address);
+      expect(await contract.topicExists(topicTitle)).eq(true);
 
-      await expect(contract.closeVoting(title))
+      await expect(contract.closeVoting(topicTitle))
       .to
       .be
       .revertedWith("Somente topicos em votacao podem ser finalizados");
@@ -581,14 +684,14 @@ describe("Condominium", function () {
       const { contract, manager, accounts } = await loadFixture(deployFixture);
       const spent = 1n;
 
-      await contract.addTopic(title, description, Category.SPENT, spent, manager.address);
+      await contract.addTopic(topicTitle, description, Category.SPENT, spent, manager.address);
 
-      await contract.openVoting(title);
+      await contract.openVoting(topicTitle);
 
       await addResidents(contract, 2, accounts);
       await addVotes(contract, 2, accounts);
 
-      await expect(contract.closeVoting(title))
+      await expect(contract.closeVoting(topicTitle))
       .to
       .be
       .revertedWith("Esta votacao ainda nao atingiu a quantidade minima de votos para ser encerrada");

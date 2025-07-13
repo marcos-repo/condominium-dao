@@ -74,6 +74,9 @@ contract Condominium is ICondominium {
         topics[getTopicId(title)] = newTopic;
     }
 
+    string public newDescription;
+    uint public baites = 0;
+
     function editTopic(string memory topicToEdit, string memory description, uint amount, address responsible) external onlyManager {
         lib.Topic memory topic = getTopic(topicToEdit);
 
@@ -82,7 +85,7 @@ contract Condominium is ICondominium {
 
         bytes32 topicId = getTopicId(topic.title);
 
-        if(bytes(description).length >= 0)
+        if(bytes(description).length > 0)
             topics[topicId].description = description;
         
         if(amount > 0)
