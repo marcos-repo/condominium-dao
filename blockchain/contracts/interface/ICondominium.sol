@@ -26,4 +26,6 @@ interface ICondominium {
     function voteCount(string memory title) external view returns (uint);
 
     function payQuota(uint16 residenceId) external payable;
+
+    function transfer(string memory topicTitle, uint amount) external;
 }

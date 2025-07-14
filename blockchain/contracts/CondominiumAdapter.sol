@@ -66,6 +66,10 @@ contract CondominiumAdapter {
         return condominium.payQuota{ value: msg.value }(residenceId);
     }
 
+    function transfer(string memory topicTitle, uint amount) external initialized {
+        return condominium.transfer(topicTitle, amount);
+    }
+
     modifier onlyOwner() {
         require(msg.sender == owner, "Somente o sindico pode executar esta operacao");
         _;

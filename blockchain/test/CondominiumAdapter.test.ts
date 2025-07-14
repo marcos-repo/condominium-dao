@@ -6,6 +6,7 @@ import { expect } from "chai";
 import hre, { ethers } from "hardhat";
 import { CondominiumAdapter } from "../typechain-types/contracts";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { getContractFactory } from "@nomicfoundation/hardhat-ethers/types";
 
 describe("Condominium Adapter", function () {
 
@@ -13,7 +14,8 @@ describe("Condominium Adapter", function () {
         IDLE = 0,
         VOTING = 1,
         APPROVED = 2, 
-        DENIED = 3 
+        DENIED = 3,
+        SPENT = 4
     }
     
   enum Options {
@@ -341,5 +343,44 @@ describe("Condominium Adapter", function () {
       .to
       .be
       .revertedWith("Contrato nao inicializado");
+    });
+
+    it("Should transfer", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+      const { implementation } = await loadFixture(deployImplementationFixture);
+      const amount = ethers.parseEther("0.02");
+      const worker = accounts[15].address;
+
+      await adapter.init(implementation);
+      await adapter.addTopic(topicTitle, "", Category.SPENT, amount, worker);
+      await adapter.openVoting(topicTitle);
+
+      await addResidents(adapter, 10, accounts);
+      await addVotes(adapter, 10, accounts);
+      await adapter.closeVoting(topicTitle);
+
+      const balanceBefore = await ethers.provider.getBalance(implementation);
+      const balanceWorkerBefore = await ethers.provider.getBalance(worker);
+
+      await adapter.transfer(topicTitle, amount);
+
+      const balanceAfter = await ethers.provider.getBalance(implementation);
+      const balanceWorkerAfter = await ethers.provider.getBalance(worker);
+
+      const topic = await implementation.getTopic(topicTitle);
+
+      expect(balanceAfter).to.be.equal(balanceBefore - amount);
+      expect(balanceWorkerAfter).to.be.equal(balanceWorkerBefore + amount);
+      expect(topic.status).eq(Status.SPENT);      
+    });
+
+    it("Should NOT transfer", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+      const amount = ethers.parseEther("0.02");
+
+      await expect(adapter.transfer(topicTitle, amount))
+      .to
+      .be
+      .revertedWith("Contrato nao inicializado");      
     });
 });

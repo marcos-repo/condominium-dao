@@ -13,7 +13,8 @@ describe("Condominium", function () {
       IDLE = 0,
       VOTING = 1,
       APPROVED = 2, 
-      DENIED = 3 
+      DENIED = 3,
+      SPENT = 4
   }
     
   enum Options {
@@ -755,6 +756,125 @@ describe("Condominium", function () {
       .to
       .be
       .revertedWith("Esta residencia nao existe");
+    });
+
+    it("Should transfer", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      const amount = ethers.parseEther("0.02");
+      const worker = accounts[15].address;
+
+      await contract.addTopic(topicTitle, "", Category.SPENT, amount, worker);
+      await contract.openVoting(topicTitle);
+
+      await addResidents(contract, 10, accounts);
+      await addVotes(contract, 10, accounts);
+      await contract.closeVoting(topicTitle);
+
+      const balanceBefore = await ethers.provider.getBalance(contract);
+      const balanceWorkerBefore = await ethers.provider.getBalance(worker);
+
+      await contract.transfer(topicTitle, amount);
+
+      const balanceAfter = await ethers.provider.getBalance(contract);
+      const balanceWorkerAfter = await ethers.provider.getBalance(worker);
+
+      const topic = await contract.getTopic(topicTitle);
+
+      expect(balanceAfter).to.be.equal(balanceBefore - amount);
+      expect(balanceWorkerAfter).to.be.equal(balanceWorkerBefore + amount);
+      expect(topic.status).eq(Status.SPENT);      
+    });
+
+    it("Should NOT transfer(permission)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      const amount = ethers.parseEther("0.02");
+      const worker = accounts[15].address;
+
+      await contract.addTopic(topicTitle, "", Category.SPENT, amount, worker);
+      await contract.openVoting(topicTitle);
+
+      await addResidents(contract, 10, accounts);
+      await addVotes(contract, 10, accounts);
+      await contract.closeVoting(topicTitle);
+
+      const instance = contract.connect(accounts[5]);
+      
+
+      await expect(instance.transfer(topicTitle, amount))
+      .to
+      .be
+      .revertedWith("Somente o sindico pode executar esta operacao");      
+    });
+
+    it("Should NOT transfer(balance)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      const amount = ethers.parseEther("0.02");
+      const worker = accounts[15].address;
+
+      await contract.addTopic(topicTitle, "", Category.SPENT, amount, worker);
+      await contract.openVoting(topicTitle);
+
+      await expect(contract.transfer(topicTitle, amount))
+      .to
+      .be
+      .revertedWith("Saldo insuficiente");      
+    });
+
+    it("Should NOT transfer(category)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      const amount = ethers.parseEther("0.02");
+      const worker = accounts[15].address;
+
+      await contract.addTopic(topicTitle, "", Category.DECISION, 0, worker);
+      await contract.openVoting(topicTitle);
+
+      await addResidents(contract, 10, accounts);
+      await addVotes(contract, 10, accounts);
+      await contract.closeVoting(topicTitle);
+
+      await expect(contract.transfer(topicTitle, amount))
+      .to
+      .be
+      .revertedWith("Somente topicos do tipo SPENT e Aprovados podem ser gastos");      
+    });
+
+    it("Should NOT transfer(status)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      const amount = ethers.parseEther("0.02");
+      const worker = accounts[15].address;
+
+      await addResidents(contract, 10, accounts);
+      await contract.addTopic(topicTitle, "", Category.SPENT, amount, worker);
+      await contract.openVoting(topicTitle);
+
+      await expect(contract.transfer(topicTitle, amount))
+      .to
+      .be
+      .revertedWith("Somente topicos do tipo SPENT e Aprovados podem ser gastos");      
+    });
+
+    it("Should NOT transfer(amount)", async function () {
+      const { contract, manager, accounts } = await loadFixture(deployFixture);
+
+      const amount = ethers.parseEther("0.02");
+      const worker = accounts[15].address;
+
+      await contract.addTopic(topicTitle, "", Category.SPENT, amount, worker);
+      await contract.openVoting(topicTitle);
+
+      await addResidents(contract, 10, accounts);
+      await addVotes(contract, 10, accounts);
+      await contract.closeVoting(topicTitle);
+
+      await expect(contract.transfer(topicTitle, amount + 1000n))
+      .to
+      .be
+      .revertedWith("O valor deve ser menor ou igual ao aprovado no topico");      
     });
 
 });

@@ -195,6 +195,22 @@ contract Condominium is ICondominium {
         payments[residenceId] = block.timestamp;
     }
 
+    function transfer(string memory topicTitle, uint amount) external onlyManager {
+        require(address(this).balance >= amount, "Saldo insuficiente");
+
+        lib.Topic memory topic = getTopic(topicTitle);
+
+        require(
+                topic.status == lib.Status.APPROVED && topic.category == lib.Category.SPENT,
+                "Somente topicos do tipo SPENT e Aprovados podem ser gastos");
+        require(topic.amount >= amount, "O valor deve ser menor ou igual ao aprovado no topico");
+
+        payable(topic.responsible).transfer(amount);
+
+        bytes32 topicId = getTopicId(topicTitle);
+        topics[topicId].status = lib.Status.SPENT;
+    }
+
     function getTopicId(string memory title) private  pure returns (bytes32 topicId) {
         topicId = keccak256(bytes(title));
     }
