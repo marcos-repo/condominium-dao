@@ -22,7 +22,15 @@ contract CondominiumAdapter {
         condominium = ICondominium(newImplementation);
     }
 
-    function addResident(address resident, uint16 residenceId ) external initialized {
+    function getManager() external view initialized returns(address) {
+        return condominium.getManager();
+    }
+
+    function getQuota() external view initialized returns(uint) {
+        return condominium.getQuota();
+    }
+
+    function addResident(address resident, uint16 residenceId) external initialized {
         return condominium.addResident(resident, residenceId);
     }
 
@@ -70,7 +78,7 @@ contract CondominiumAdapter {
                 emit ManagerChanged(condominium.getManager());
             }
             else if (topic.category == lib.Category.CHANGE_QUOTA) {
-                emit QuotaChanged(condominium.getQuota())
+                emit QuotaChanged(condominium.getQuota());
             }
         }
     }

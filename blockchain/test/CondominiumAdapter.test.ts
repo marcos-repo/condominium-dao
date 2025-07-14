@@ -38,18 +38,18 @@ describe("Condominium Adapter", function () {
   async function addResidents(adapter: CondominiumAdapter, count: number, accounts: SignerWithAddress[]) {
       for (let i = 1; i <= count; i++) {
         const residenceId = (1000 * Math.ceil(i / 25)) + (100 * Math.ceil(i / 5) + (i - (5 * Math.floor(( i - 1) / 5))));
-        await adapter.addResident(accounts[i].address, residenceId);     
+        await adapter.addResident(accounts[i-1].address, residenceId);     
 
         const instance = adapter.connect(accounts[i-1]);
         await instance.payQuota(residenceId, {value: ethers.parseEther("0.01")});
       }
   }
 
-  async function addVotes(adapter: CondominiumAdapter, count: number, accounts: SignerWithAddress[]) {
+  async function addVotes(adapter: CondominiumAdapter, count: number, accounts: SignerWithAddress[], option: Options | undefined) {
     for (let i = 1; i <= count; i++) {
-      const instance = adapter.connect(accounts[i]);
+      const instance = adapter.connect(accounts[i-1]);
 
-      await instance.vote(topicTitle, Options.YES);  
+      await instance.vote(topicTitle, option == undefined ? Options.YES : option); 
     }
   }
   
@@ -93,6 +93,44 @@ describe("Condominium Adapter", function () {
       .to
       .be
       .revertedWith("Somente o sindico pode executar esta operacao");
+    });
+
+    it("Should get manager", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+      const { implementation } = await loadFixture(deployImplementationFixture);
+
+      await adapter.init(implementation);
+      const managerAddr = await adapter.getManager();
+
+      expect(managerAddr).eq(manager);
+    });
+
+    it("Should NOT get manager(init)", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+
+      await expect(adapter.getManager())
+      .to
+      .be
+      .revertedWith("Contrato nao inicializado");
+    });
+
+    it("Should get quota", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+      const { implementation } = await loadFixture(deployImplementationFixture);
+
+      await adapter.init(implementation);
+      const quota = await adapter.getQuota();
+
+      expect(quota).eq(await implementation.getQuota());
+    });
+
+    it("Should NOT get quota(init)", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+
+      await expect(adapter.getQuota())
+      .to
+      .be
+      .revertedWith("Contrato nao inicializado");
     });
 
     it("Should add resident", async function () {
@@ -297,6 +335,56 @@ describe("Condominium Adapter", function () {
       expect((await implementation.getTopic(topicTitle)).status).not.eq(Status.VOTING);
     });
 
+    it("Should close voting(change manager)", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+      const { implementation } = await loadFixture(deployImplementationFixture);
+
+      await adapter.init(implementation);
+      await adapter.addTopic(topicTitle, "", Category.CHANGE_MANAGER, 0, accounts[2].address);
+      await adapter.openVoting(topicTitle);
+
+      await addResidents(adapter, 15, accounts);
+      await addVotes(adapter, 15, accounts);
+
+      await expect(adapter.closeVoting(topicTitle))
+        .to
+        .emit(adapter, "ManagerChanged")
+        .withArgs(accounts[2].address);
+    });
+
+    it("Should close voting(change quota)", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+      const { implementation } = await loadFixture(deployImplementationFixture);
+
+      await adapter.init(implementation);
+      await adapter.addTopic(topicTitle, "", Category.CHANGE_QUOTA, 100n, manager.address);
+      await adapter.openVoting(topicTitle);
+
+      await addResidents(adapter, 20, accounts);
+      await addVotes(adapter, 20, accounts);
+
+      await expect(adapter.closeVoting(topicTitle))
+        .to
+        .emit(adapter, "QuotaChanged")
+        .withArgs(100n);
+    });
+
+    it("Should close voting(denied)", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+      const { implementation } = await loadFixture(deployImplementationFixture);
+
+      await adapter.init(implementation);
+      await adapter.addTopic(topicTitle, "", Category.DECISION, 0, manager.address);
+      await adapter.openVoting(topicTitle);
+
+      await addResidents(adapter, 5, accounts);
+      await addVotes(adapter, 5, accounts, Options.NO);
+
+      await adapter.closeVoting(topicTitle);
+
+      expect((await implementation.getTopic(topicTitle)).status).eq(Status.DENIED);
+    });
+
     it("Should NOT close voting", async function () {
       const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
       const { implementation } = await loadFixture(deployImplementationFixture);
@@ -306,7 +394,6 @@ describe("Condominium Adapter", function () {
       .be
       .revertedWith("Contrato nao inicializado");
     });
-
 
     it("Should NOT vote count", async function () {
       const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
@@ -358,7 +445,7 @@ describe("Condominium Adapter", function () {
       await addResidents(adapter, 10, accounts);
       await addVotes(adapter, 10, accounts);
       await adapter.closeVoting(topicTitle);
-
+      
       const balanceBefore = await ethers.provider.getBalance(implementation);
       const balanceWorkerBefore = await ethers.provider.getBalance(worker);
 
