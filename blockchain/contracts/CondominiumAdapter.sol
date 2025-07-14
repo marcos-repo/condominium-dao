@@ -39,23 +39,40 @@ contract CondominiumAdapter {
     }
 
     function editTopic(string memory topicToEdit, string memory description, uint amount, address responsible) external initialized {
-        return condominium.editTopic(topicToEdit, description, amount, responsible);
+        lib.TopicUpdate memory topic = condominium.editTopic(topicToEdit, description, amount, responsible);
+
+        emit TopicChanged(topic.id, topic.title, topic.status);
     }
 
     function removeTopic(string memory title) external initialized {
-        return condominium.removeTopic(title);
+        lib.TopicUpdate memory topic =  condominium.removeTopic(title);
+
+        emit TopicChanged(topic.id, topic.title, topic.status);
     }
 
     function openVoting(string memory title) external initialized {
-        return condominium.openVoting(title);
+        lib.TopicUpdate memory topic =  condominium.openVoting(title);
+
+        emit TopicChanged(topic.id, topic.title, topic.status);
     }
 
     function vote(string memory title, lib.Options option) external initialized{
         return condominium.vote(title, option);
     }
 
-    function closeVoting(string memory title) external initialized{
-        return condominium.closeVoting(title);
+    function closeVoting(string memory title) external initialized {
+        lib.TopicUpdate memory topic =  condominium.closeVoting(title);
+
+        emit TopicChanged(topic.id, topic.title, topic.status);
+
+        if(topic.status == lib.Status.APPROVED) {
+            if(topic.category == lib.Category.CHANGE_MANAGER) {
+                emit ManagerChanged(condominium.getManager());
+            }
+            else if (topic.category == lib.Category.CHANGE_QUOTA) {
+                emit QuotaChanged(condominium.getQuota())
+            }
+        }
     }
 
     function voteCount(string memory title) external view initialized returns (uint) {
@@ -67,8 +84,21 @@ contract CondominiumAdapter {
     }
 
     function transfer(string memory topicTitle, uint amount) external initialized {
-        return condominium.transfer(topicTitle, amount);
+        lib.TransferReceipt memory receipt = condominium.transfer(topicTitle, amount);
+
+        emit Transfer(receipt.to, receipt.amount, receipt.topic);
     }
+
+
+    event QuotaChanged(uint amount);
+
+    event ManagerChanged(address manager);
+
+    event TopicChanged(bytes32 indexed topicId, string title, lib.Status indexed status);
+
+    event Transfer(address to, uint indexed amount, string topic);
+
+
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Somente o sindico pode executar esta operacao");

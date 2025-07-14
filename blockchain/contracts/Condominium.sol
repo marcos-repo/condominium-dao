@@ -26,6 +26,14 @@ contract Condominium is ICondominium {
         }
     }
 
+    function getManager() external view returns(address) {
+        return manager;
+    }
+
+    function getQuota() external view returns(uint) {
+        return monthlyQuota;
+    }
+
     function addResident(address resident, uint16 residenceId ) external onlyCouncil validAddress(resident) {
         require(residenceExists(residenceId), "Esta residencia nao existe");
         residents[resident] = residenceId;
@@ -75,7 +83,9 @@ contract Condominium is ICondominium {
         topics[getTopicId(title)] = newTopic;
     }
 
-    function editTopic(string memory topicToEdit, string memory description, uint amount, address responsible) external onlyManager {
+    function editTopic(string memory topicToEdit, string memory description, uint amount, address responsible) 
+        external onlyManager returns (lib.TopicUpdate memory) {
+        
         lib.Topic memory topic = getTopic(topicToEdit);
 
         require(topic.createDate > 0, "Topico inexistente");
@@ -91,18 +101,35 @@ contract Condominium is ICondominium {
 
         if(responsible != address(0))
             topics[topicId].responsible = responsible;
+
+        return lib.TopicUpdate({
+            id: topicId,
+            title: topic.title,
+            category: topic.category,
+            status: topic.status
+        });
     }
 
-    function removeTopic(string memory title) external onlyManager {
+    function removeTopic(string memory title) 
+        external onlyManager returns (lib.TopicUpdate memory) {
+
         lib.Topic memory topic = getTopic(title);
 
         require(topic.createDate > 0, "Topico inexistente");
         require(topic.status == lib.Status.IDLE, "Este topico nao pode ser removido");
 
         delete topics[getTopicId(title)];
+
+        return lib.TopicUpdate({
+            id: getTopicId(title),
+            title: topic.title,
+            category: topic.category,
+            status: lib.Status.DELETED
+        });
     }
 
-    function openVoting(string memory title) external onlyManager {
+    function openVoting(string memory title) 
+        external onlyManager returns (lib.TopicUpdate memory) {
         lib.Topic memory topic = getTopic(title);
         require(topic.createDate > 0, "Topico inexistente");
         require(topic.status == lib.Status.IDLE, "Somente topicos ociosos podem ter a votacao iniciada");
@@ -110,6 +137,13 @@ contract Condominium is ICondominium {
         bytes32 topicId = getTopicId(title);
         topics[topicId].status = lib.Status.VOTING;
         topics[topicId].startDate = block.timestamp;
+
+        return lib.TopicUpdate({
+            id: topicId,
+            title: topic.title,
+            category: topic.category,
+            status: lib.Status.VOTING
+        });
     }
 
     function vote(string memory title, lib.Options option) external onlyResident {
@@ -137,7 +171,8 @@ contract Condominium is ICondominium {
         votings[topicId].push(newVote);
     }
 
-    function closeVoting(string memory title) external onlyManager {
+    function closeVoting(string memory title) 
+        external onlyManager returns (lib.TopicUpdate memory) {
         lib.Topic memory topic = getTopic(title);
         require(topic.createDate > 0, "Topico inexistente");
         require(topic.status == lib.Status.VOTING, "Somente topicos em votacao podem ser finalizados");
@@ -180,6 +215,13 @@ contract Condominium is ICondominium {
                 manager = topic.responsible;
             }
         }
+
+        return lib.TopicUpdate({
+            id: topicId,
+            title: topic.title,
+            category: topic.category,
+            status: newStatus
+        });
     }
 
     function voteCount(string memory title) public view returns (uint) {
@@ -195,7 +237,8 @@ contract Condominium is ICondominium {
         payments[residenceId] = block.timestamp;
     }
 
-    function transfer(string memory topicTitle, uint amount) external onlyManager {
+    function transfer(string memory topicTitle, uint amount) 
+        external onlyManager  returns (lib.TransferReceipt memory) {
         require(address(this).balance >= amount, "Saldo insuficiente");
 
         lib.Topic memory topic = getTopic(topicTitle);
@@ -209,6 +252,12 @@ contract Condominium is ICondominium {
 
         bytes32 topicId = getTopicId(topicTitle);
         topics[topicId].status = lib.Status.SPENT;
+
+        return lib.TransferReceipt({
+            to: topic.responsible,
+            amount: amount,
+            topic: topicTitle
+         });
     }
 
     function getTopicId(string memory title) private  pure returns (bytes32 topicId) {

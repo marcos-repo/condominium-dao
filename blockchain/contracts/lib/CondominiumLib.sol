@@ -7,7 +7,8 @@ library CondominiumLib {
         VOTING, // 1
         APPROVED, // 2
         DENIED, // 3
-        SPENT // 4
+        SPENT, // 4
+        DELETED // 5
     }
     
     enum Options {
@@ -41,5 +42,18 @@ library CondominiumLib {
         uint16 residence;
         Options option;
         uint256 timestamp;
+    }
+
+    struct TopicUpdate {
+        bytes32 id;
+        string title;
+        Status status;
+        Category category;
+    }
+
+    struct TransferReceipt {
+        address to;
+        uint amount;
+        string topic;
     }
 }
