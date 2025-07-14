@@ -62,6 +62,10 @@ contract CondominiumAdapter {
         return condominium.voteCount(title);
     }
 
+    function payQuota(uint16 residenceId) external payable initialized {
+        return condominium.payQuota{ value: msg.value }(residenceId);
+    }
+
     modifier onlyOwner() {
         require(msg.sender == owner, "Somente o sindico pode executar esta operacao");
         _;

@@ -11,6 +11,7 @@ contract Condominium is ICondominium {
     mapping(address => bool) public counselors; //conselheiro => true
     mapping(bytes32 => lib.Topic) public topics;
     mapping(bytes32 => lib.Vote[]) public votings;
+    mapping (uint16 => uint) payments;
     uint public monthlyQuota = 0.01 ether;
 
     constructor() {
@@ -74,9 +75,6 @@ contract Condominium is ICondominium {
         topics[getTopicId(title)] = newTopic;
     }
 
-    string public newDescription;
-    uint public baites = 0;
-
     function editTopic(string memory topicToEdit, string memory description, uint amount, address responsible) external onlyManager {
         lib.Topic memory topic = getTopic(topicToEdit);
 
@@ -93,9 +91,6 @@ contract Condominium is ICondominium {
 
         if(responsible != address(0))
             topics[topicId].responsible = responsible;
-
-        
-
     }
 
     function removeTopic(string memory title) external onlyManager {
@@ -192,6 +187,13 @@ contract Condominium is ICondominium {
         return votings[topicId].length;
     }
 
+    function payQuota(uint16 residenceId) external payable {
+        require(residenceExists(residenceId), "Esta residencia nao existe");
+        require(msg.value >= monthlyQuota, "Valor invalido");
+        require(block.timestamp > payments[residenceId] + (30 * 24 * 60 * 60), "Voce nao pode pagar duas vezes no mesmo mes");
+
+        payments[residenceId] = block.timestamp;
+    }
 
     function getTopicId(string memory title) private  pure returns (bytes32 topicId) {
         topicId = keccak256(bytes(title));
@@ -209,6 +211,8 @@ contract Condominium is ICondominium {
 
     modifier onlyResident() {
         require(tx.origin == manager || isResident(tx.origin), "Somente o sindico ou moradores podem executar esta operacao");
+        require(tx.origin == manager || block.timestamp < payments[residents[tx.origin]] + (30 * 24 * 60 * 60), 
+                "O morador deve estar adimplente");
         _;
     }
 

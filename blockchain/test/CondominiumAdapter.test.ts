@@ -37,6 +37,9 @@ describe("Condominium Adapter", function () {
       for (let i = 1; i <= count; i++) {
         const residenceId = (1000 * Math.ceil(i / 25)) + (100 * Math.ceil(i / 5) + (i - (5 * Math.floor(( i - 1) / 5))));
         await adapter.addResident(accounts[i].address, residenceId);     
+
+        const instance = adapter.connect(accounts[i-1]);
+        await instance.payQuota(residenceId, {value: ethers.parseEther("0.01")});
       }
   }
 
@@ -252,7 +255,8 @@ describe("Condominium Adapter", function () {
       const resident = accounts[1];
 
       await adapter.init(implementation);
-      await adapter.addResident(resident.address, 2201);
+      await addResidents(adapter, 5, accounts);
+
       await adapter.addTopic(topicTitle, "", Category.DECISION, 0, manager.address);
       await adapter.openVoting(topicTitle);
       
@@ -328,5 +332,14 @@ describe("Condominium Adapter", function () {
       .to
       .be
       .revertedWith("Endereco vazio nao permitido");
+    });
+
+    it("Should NOT pay quota", async function () {
+      const { adapter, manager, accounts} = await loadFixture(deployAdapterFixture);
+
+      await expect(adapter.payQuota(1102, {value: 0}))
+      .to
+      .be
+      .revertedWith("Contrato nao inicializado");
     });
 });
