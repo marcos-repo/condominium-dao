@@ -11,6 +11,7 @@
   "scripts": {
     "test": "npx hardhat test",
     "coverage": "npx hardhat coverage",
-    "compile": "npx hardhat compile"
+    "compile": "npx hardhat compile",
+    "ignition": "npx hardhat ignition deploy ignition/modules/Condominium.ts --network sepolia"
   }
 }

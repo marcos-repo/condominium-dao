@@ -3,9 +3,14 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
 const CondominiumModule = buildModule("CondominiumModule", (m) => {
 
-  const protoCoin = m.contract("Condominium");
+  const condominium = m.contract("Condominium");
+  const adapter =  m.contract("CondominiumAdapter", [], {
+    after: [condominium], //Força o deploy sequencial
+  });
 
-  return { protoCoin };
+  m.call(adapter, "init", [condominium]);
+
+  return { condominium, adapter };
 });
 
 export default CondominiumModule;
